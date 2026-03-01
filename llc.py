@@ -301,17 +301,17 @@ def back_kb():
 
 def ticket_actions_kb(ticket_id, is_admin=True):
     if is_admin:
-        buttons = [
+        row = [
             InlineKeyboardButton("✏️ Ответить", callback_data=f"admin_reply:{ticket_id}"),
             InlineKeyboardButton("✅ Закрыть", callback_data=f"close:{ticket_id}")
         ]
     else:
-        buttons = [
+        row = [
             InlineKeyboardButton("✏️ Ответить", callback_data=f"user_reply:{ticket_id}"),
             InlineKeyboardButton("🔄 Обновить", callback_data=f"refresh:{ticket_id}")
         ]
     return InlineKeyboardMarkup(inline_keyboard=[
-        buttons,
+        row,
         [InlineKeyboardButton("◀️ Назад", callback_data="back_list")]
     ])
 
