@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import hashlib
 from datetime import datetime
-from aiogram import Bot, Dispatcher, types, executor
+from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -736,4 +736,5 @@ if __name__ == '__main__':
     print("CoreDebuging Bot")
     print(f"Админ ID: {ADMIN_ID}")
     print("=" * 50)
+
     executor.start_polling(dp, skip_updates=True)
