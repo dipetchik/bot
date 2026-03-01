@@ -318,12 +318,12 @@ def ticket_actions_kb(ticket_id, is_admin=True):
 
 def user_tickets_kb(user_id):
     tickets = get_user_tickets_db(user_id)
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    inline_kb = []
     for t in tickets:
         emoji = "✅" if t[2] == "closed" else "🟢"
-        kb.inline_keyboard.append([InlineKeyboardButton(f"{emoji} {t[0]}", callback_data=f"view_ticket:{t[0]}")])
-    kb.inline_keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
-    return kb
+        inline_kb.append([InlineKeyboardButton(f"{emoji} {t[0]}", callback_data=f"view_ticket:{t[0]}")])
+    inline_kb.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
+    return InlineKeyboardMarkup(inline_keyboard=inline_kb)
 
 
 def scan_kb():
@@ -385,11 +385,12 @@ async def create_ticket(callback: types.CallbackQuery):
 
 @dp.message(States.ticket_message)
 async def process_ticket(m: types.Message, state: FSMContext):
-    if len(m.text or "") < 10:
+    text = m.text or ""
+    if len(text) < 10:
         await m.answer("❌ Слишком короткое сообщение. Минимум 10 символов.", reply_markup=back_kb())
         return
 
-    ticket_id = create_ticket_db(m.from_user.id, m.from_user.username or "NoName", m.text)
+    ticket_id = create_ticket_db(m.from_user.id, m.from_user.username or "NoName", text)
 
     await m.answer(
         f"✅ Обращение {ticket_id} создано!\n\nАдминистратор ответит вам.",
@@ -399,7 +400,7 @@ async def process_ticket(m: types.Message, state: FSMContext):
     if ADMIN_ID:
         await bot.send_message(
             ADMIN_ID,
-            f"🆕 Новое обращение {ticket_id}\nОт: @{m.from_user.username or 'NoName'}\n\n{m.text}",
+            f"🆕 Новое обращение {ticket_id}\nОт: @{m.from_user.username or 'NoName'}\n\n{text}",
             reply_markup=ticket_actions_kb(ticket_id, True)
         )
     await state.clear()
@@ -471,14 +472,15 @@ async def process_user_reply(m: types.Message, state: FSMContext):
     data = await state.get_data()
     ticket_id = data.get("ticket")
 
-    add_message_to_ticket_db(ticket_id, m.from_user.id, 'user', m.text)
+    text = m.text or ""
+    add_message_to_ticket_db(ticket_id, m.from_user.id, 'user', text)
 
     await m.answer("✅ Сообщение добавлено в обращение.", reply_markup=main_kb())
 
     if ADMIN_ID:
         await bot.send_message(
             ADMIN_ID,
-            f"📨 Новое сообщение в {ticket_id}\nОт: @{m.from_user.username or 'NoName'}\n\n{m.text}",
+            f"📨 Новое сообщение в {ticket_id}\nОт: @{m.from_user.username or 'NoName'}\n\n{text}",
             reply_markup=ticket_actions_kb(ticket_id, True)
         )
     await state.clear()
@@ -530,7 +532,7 @@ async def admin_view(callback: types.CallbackQuery):
     msgs = get_ticket_messages_db(ticket_id)
     status = "✅ Закрыто" if ticket[5] == "closed" else "🟢 Открыто"
 
-    text = f"ОБРАЩЕНИЕ {ticket_id}\nСтатус: {status}\nОт: @{ticket[3]}\n\nПЕРЕПИСКА:\n"
+    text = f"ОБРАЩЕНИЕ {ticket_id}\nСтатус: {status}\nОт: @{ticket[3] or 'Unknown'}\n\nПЕРЕПИСКА:\n"
     for s, msg, dt in msgs:
         who = "Пользователь" if s == "user" else "Вы"
         text += f"\n{who} ({dt[:16]}):\n{msg}\n"
@@ -571,17 +573,18 @@ async def process_admin_reply(m: types.Message, state: FSMContext):
     ticket_id = data.get("ticket")
     ticket = get_ticket_info_db(ticket_id)
 
-    add_message_to_ticket_db(ticket_id, ADMIN_ID, 'admin', m.text)
+    text = m.text or ""
+    add_message_to_ticket_db(ticket_id, ADMIN_ID, 'admin', text)
 
     try:
         await bot.send_message(
             ticket[2],
-            f"📨 Ответ на {ticket_id}:\n\n{m.text}",
+            f"📨 Ответ на {ticket_id}:\n\n{text}",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton("📋 К обращению", callback_data=f"view_ticket:{ticket_id}")
             ]])
         )
-        await m.answer(f"✅ Ответ отправлен @{ticket[3]}", reply_markup=admin_kb())
+        await m.answer(f"✅ Ответ отправлен @{ticket[3] or 'Unknown'}", reply_markup=admin_kb())
     except Exception:
         await m.answer("❌ Не удалось отправить", reply_markup=admin_kb())
 
