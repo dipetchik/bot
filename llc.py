@@ -6,11 +6,12 @@ import hashlib
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.exceptions import MessageNotModified
+from aiogram.exceptions import TelegramBadRequest
 
 # ==================== НАСТРОЙКИ ====================
 BOT_TOKEN = "8717763658:AAFZ7SKbdF_oQvZER2WKZY_F9iP8Udg7mHo"
@@ -21,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+dp = Dispatcher(bot=bot, storage=storage)
 
 # ==================== HYBRID ANALYSIS КЛИЕНТ ====================
 class HybridAnalyzer:
@@ -69,7 +70,7 @@ class HybridAnalyzer:
         else:
             classification = "unknown"
 
-        family = report.get('threat_family', None)
+        family = report.get('threat_family')
 
         return {
             "success": True,
@@ -257,20 +258,11 @@ def get_stats_db():
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
 
-    cursor.execute('SELECT COUNT(*) FROM tickets')
-    total_tickets = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM tickets WHERE status='open'")
-    open_tickets = cursor.fetchone()[0]
-
-    cursor.execute('SELECT COUNT(DISTINCT user_id) FROM tickets')
-    unique_users = cursor.fetchone()[0]
-
-    cursor.execute('SELECT COUNT(*) FROM ticket_messages')
-    total_messages = cursor.fetchone()[0]
-
-    cursor.execute('SELECT COUNT(*) FROM scans')
-    total_scans = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM tickets'); total_tickets = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM tickets WHERE status='open'"); open_tickets = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(DISTINCT user_id) FROM tickets'); unique_users = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM ticket_messages'); total_messages = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM scans'); total_scans = cursor.fetchone()[0]
 
     conn.close()
     return total_tickets, open_tickets, unique_users, total_messages, total_scans
@@ -346,31 +338,25 @@ def scan_kb():
     return kb
 
 # ==================== ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ "НАЗАД" ====================
-@dp.callback_query_handler(lambda c: c.data == "back_main", state="*")
+@dp.callback_query(lambda c: c.data == "back_main")
 async def global_back_main(callback: types.CallbackQuery, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is not None:
-        await state.finish()
-
+    await state.clear()
     text = "Главное меню:"
     if callback.from_user.id == ADMIN_ID:
         markup = admin_kb()
     else:
         markup = main_kb()
-
     try:
         await callback.message.edit_text(text, reply_markup=markup)
-    except MessageNotModified:
-        pass
+    except TelegramBadRequest as e:
+        if "message is not modified" in e.message.lower():
+            pass
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data == "back_list", state="*")
+@dp.callback_query(lambda c: c.data == "back_list")
 async def global_back_list(callback: types.CallbackQuery, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is not None:
-        await state.finish()
-
+    await state.clear()
     if callback.from_user.id == ADMIN_ID:
         await show_open_tickets(callback)
     else:
@@ -378,17 +364,16 @@ async def global_back_list(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 # ==================== ОСНОВНЫЕ ОБРАБОТЧИКИ ====================
-@dp.message_handler(commands=['start'])
+@dp.message(Command("start"))
 async def start(message: types.Message):
     text = "👋 Добро пожаловать!\n\nФункции:\n• Сканирование файлов\n• Создание обращений\n• Просмотр истории"
-
     if message.from_user.id == ADMIN_ID:
         await message.answer(text + "\n\n(Админ-панель)", reply_markup=admin_kb())
     else:
         await message.answer(text, reply_markup=main_kb())
 
 
-@dp.callback_query_handler(lambda c: c.data == "info")
+@dp.callback_query(lambda c: c.data == "info")
 async def info(callback: types.CallbackQuery):
     text = "CoreDebuging Bot\n\nВерсия: 4.2\nКоманда: @CoreDebuging\nAPI: Hybrid Analysis"
     await callback.message.edit_text(text, reply_markup=back_kb())
@@ -396,7 +381,7 @@ async def info(callback: types.CallbackQuery):
 
 
 # ==================== ОБРАЩЕНИЯ ====================
-@dp.callback_query_handler(lambda c: c.data == "create_ticket")
+@dp.callback_query(lambda c: c.data == "create_ticket")
 async def create_ticket(callback: types.CallbackQuery):
     await callback.message.edit_text(
         "📝 Опишите вашу проблему:",
@@ -406,7 +391,7 @@ async def create_ticket(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.message_handler(state=States.ticket_message)
+@dp.message(States.ticket_message)
 async def process_ticket(m: types.Message, state: FSMContext):
     if len(m.text) < 10:
         await m.answer("❌ Слишком короткое сообщение. Минимум 10 символов.", reply_markup=back_kb())
@@ -425,28 +410,22 @@ async def process_ticket(m: types.Message, state: FSMContext):
             f"🆕 Новое обращение {ticket_id}\nОт: @{m.from_user.username or 'NoName'}\n\n{m.text}",
             reply_markup=ticket_actions_kb(ticket_id, True)
         )
-    await state.finish()
+    await state.clear()
 
 
-@dp.callback_query_handler(lambda c: c.data == "my_tickets")
+@dp.callback_query(lambda c: c.data == "my_tickets")
 async def show_my_tickets(callback: types.CallbackQuery):
     tickets = get_user_tickets_db(callback.from_user.id)
     if not tickets:
-        await callback.message.edit_text(
-            "📭 У вас нет обращений.",
-            reply_markup=back_kb()
-        )
+        await callback.message.edit_text("📭 У вас нет обращений.", reply_markup=back_kb())
         await callback.answer()
         return
 
-    await callback.message.edit_text(
-        "📋 Ваши обращения:",
-        reply_markup=user_tickets_kb(callback.from_user.id)
-    )
+    await callback.message.edit_text("📋 Ваши обращения:", reply_markup=user_tickets_kb(callback.from_user.id))
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith('view_ticket:'))
+@dp.callback_query(lambda c: c.data.startswith('view_ticket:'))
 async def view_ticket(callback: types.CallbackQuery):
     ticket_id = callback.data.split(':')[1]
     ticket = get_ticket_info_db(ticket_id)
@@ -463,17 +442,22 @@ async def view_ticket(callback: types.CallbackQuery):
         text += f"\n{who} ({dt[:16]}):\n{msg}\n"
 
     is_admin = callback.from_user.id == ADMIN_ID
+    kb = ticket_actions_kb(ticket_id, is_admin)
+
     try:
-        await callback.message.edit_text(text, reply_markup=ticket_actions_kb(ticket_id, is_admin))
-    except MessageNotModified:
-        await callback.message.edit_reply_markup(reply_markup=ticket_actions_kb(ticket_id, is_admin))
+        await callback.message.edit_text(text, reply_markup=kb)
+    except TelegramBadRequest as e:
+        if "message is not modified" in e.message.lower():
+            await callback.message.edit_reply_markup(reply_markup=kb)
+        else:
+            await callback.message.answer(text, reply_markup=kb)
     except Exception:
-        await callback.message.answer(text, reply_markup=ticket_actions_kb(ticket_id, is_admin))
+        await callback.message.answer(text, reply_markup=kb)
 
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith('user_reply:'))
+@dp.callback_query(lambda c: c.data.startswith('user_reply:'))
 async def user_reply(callback: types.CallbackQuery, state: FSMContext):
     ticket_id = callback.data.split(':')[1]
     ticket = get_ticket_info_db(ticket_id)
@@ -490,17 +474,14 @@ async def user_reply(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.message_handler(state=States.ticket_reply)
+@dp.message(States.ticket_reply)
 async def process_user_reply(m: types.Message, state: FSMContext):
     data = await state.get_data()
     ticket_id = data.get("ticket")
 
     add_message_to_ticket_db(ticket_id, m.from_user.id, 'user', m.text)
 
-    await m.answer(
-        "✅ Сообщение добавлено в обращение.",
-        reply_markup=main_kb()
-    )
+    await m.answer("✅ Сообщение добавлено в обращение.", reply_markup=main_kb())
 
     if ADMIN_ID:
         await bot.send_message(
@@ -508,20 +489,16 @@ async def process_user_reply(m: types.Message, state: FSMContext):
             f"📨 Новое сообщение в {ticket_id}\nОт: @{m.from_user.username or 'NoName'}\n\n{m.text}",
             reply_markup=ticket_actions_kb(ticket_id, True)
         )
-    await state.finish()
+    await state.clear()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith('refresh:'))
+@dp.callback_query(lambda c: c.data.startswith('refresh:'))
 async def refresh(callback: types.CallbackQuery):
-    ticket_id = callback.data.split(':')[1]
-    try:
-        await view_ticket(callback)
-    except MessageNotModified:
-        await callback.answer("🔄 Новых сообщений нет", show_alert=False)
+    await view_ticket(callback)
 
 
 # ==================== АДМИН ФУНКЦИИ ====================
-@dp.callback_query_handler(lambda c: c.data == "admin_open")
+@dp.callback_query(lambda c: c.data == "admin_open")
 async def show_open_tickets(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -529,10 +506,7 @@ async def show_open_tickets(callback: types.CallbackQuery):
 
     tickets = get_open_tickets_db()
     if not tickets:
-        await callback.message.edit_text(
-            "✅ Нет открытых обращений.",
-            reply_markup=back_kb()
-        )
+        await callback.message.edit_text("✅ Нет открытых обращений.", reply_markup=back_kb())
         await callback.answer()
         return
 
@@ -550,7 +524,7 @@ async def show_open_tickets(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith('admin_view:'))
+@dp.callback_query(lambda c: c.data.startswith('admin_view:'))
 async def admin_view(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -570,7 +544,7 @@ async def admin_view(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith('admin_reply:'))
+@dp.callback_query(lambda c: c.data.startswith('admin_reply:'))
 async def admin_reply(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -591,11 +565,11 @@ async def admin_reply(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.message_handler(state=States.admin_reply)
+@dp.message(States.admin_reply)
 async def process_admin_reply(m: types.Message, state: FSMContext):
     if m.from_user.id != ADMIN_ID:
         await m.answer("❌ Нет прав")
-        await state.finish()
+        await state.clear()
         return
 
     data = await state.get_data()
@@ -616,10 +590,10 @@ async def process_admin_reply(m: types.Message, state: FSMContext):
     except Exception:
         await m.answer("❌ Не удалось отправить", reply_markup=admin_kb())
 
-    await state.finish()
+    await state.clear()
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith('close:'))
+@dp.callback_query(lambda c: c.data.startswith('close:'))
 async def close(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -639,7 +613,7 @@ async def close(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data == "admin_stats")
+@dp.callback_query(lambda c: c.data == "admin_stats")
 async def stats(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -653,7 +627,7 @@ async def stats(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==================== СКАНИРОВАНИЕ ====================
-@dp.callback_query_handler(lambda c: c.data == "scan_file")
+@dp.callback_query(lambda c: c.data == "scan_file")
 async def scan_start(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "🔍 Отправьте файл (до 20 МБ):",
@@ -663,12 +637,12 @@ async def scan_start(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.message_handler(content_types=['document'], state=States.waiting_file)
+@dp.message(content_types=types.ContentType.DOCUMENT, state=States.waiting_file)
 async def scan_file(m: types.Message, state: FSMContext):
     doc = m.document
     if doc.file_size > 20 * 1024 * 1024:
         await m.answer("❌ Файл >20 МБ", reply_markup=back_kb())
-        await state.finish()
+        await state.clear()
         return
 
     status_msg = await m.answer("📥 Скачиваю файл...")
@@ -688,7 +662,7 @@ async def scan_file(m: types.Message, state: FSMContext):
 
         if not result.get("success"):
             await status_msg.edit_text(f"❌ Ошибка: {result.get('error')}", reply_markup=back_kb())
-            await state.finish()
+            await state.clear()
             return
 
         classification = result.get("classification", "unknown")
@@ -724,21 +698,21 @@ async def scan_file(m: types.Message, state: FSMContext):
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка: {str(e)}", reply_markup=back_kb())
 
-    await state.finish()
+    await state.clear()
 
 
-@dp.message_handler(state=States.waiting_file)
+@dp.message(state=States.waiting_file)
 async def invalid_file(m: types.Message):
     await m.answer("❌ Отправьте файл", reply_markup=back_kb())
 
 # ==================== ЗАПУСК ====================
-if __name__ == '__main__':
+async def main():
     print("=" * 50)
     print("CoreDebuging Bot")
     print(f"Админ ID: {ADMIN_ID}")
     print("=" * 50)
-
-    executor.start_polling(dp, skip_updates=True)
-
+    await dp.start_polling(bot, skip_updates=True)
 
 
+if __name__ == '__main__':
+    asyncio.run(main())
