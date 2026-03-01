@@ -5,13 +5,14 @@ import asyncio
 import hashlib
 from datetime import datetime
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.enums import ContentType
 
 # ==================== НАСТРОЙКИ ====================
 BOT_TOKEN = "8717763658:AAFZ7SKbdF_oQvZER2WKZY_F9iP8Udg7mHo"
@@ -338,7 +339,7 @@ def scan_kb():
     return kb
 
 # ==================== ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ "НАЗАД" ====================
-@dp.callback_query(lambda c: c.data == "back_main")
+@dp.callback_query(F.data == "back_main")
 async def global_back_main(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     text = "Главное меню:"
@@ -351,7 +352,7 @@ async def global_back_main(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data == "back_list")
+@dp.callback_query(F.data == "back_list")
 async def global_back_list(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     if callback.from_user.id == ADMIN_ID:
@@ -368,14 +369,14 @@ async def start(message: types.Message):
     await message.answer(text + ("\n\n(Админ-панель)" if message.from_user.id == ADMIN_ID else ""), reply_markup=markup)
 
 
-@dp.callback_query(lambda c: c.data == "info")
+@dp.callback_query(F.data == "info")
 async def info(callback: types.CallbackQuery):
     text = "CoreDebuging Bot\n\nВерсия: 4.2\nКоманда: @CoreDebuging\nAPI: Hybrid Analysis"
     await callback.message.edit_text(text, reply_markup=back_kb())
     await callback.answer()
 
 # ==================== ОБРАЩЕНИЯ ====================
-@dp.callback_query(lambda c: c.data == "create_ticket")
+@dp.callback_query(F.data == "create_ticket")
 async def create_ticket(callback: types.CallbackQuery):
     await callback.message.edit_text(
         "📝 Опишите вашу проблему:",
@@ -407,7 +408,7 @@ async def process_ticket(m: types.Message, state: FSMContext):
     await state.clear()
 
 
-@dp.callback_query(lambda c: c.data == "my_tickets")
+@dp.callback_query(F.data == "my_tickets")
 async def show_my_tickets(callback: types.CallbackQuery):
     tickets = get_user_tickets_db(callback.from_user.id)
     if not tickets:
@@ -419,7 +420,7 @@ async def show_my_tickets(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data.startswith('view_ticket:'))
+@dp.callback_query(F.data.startswith('view_ticket:'))
 async def view_ticket(callback: types.CallbackQuery):
     ticket_id = callback.data.split(':')[1]
     ticket = get_ticket_info_db(ticket_id)
@@ -451,7 +452,7 @@ async def view_ticket(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data.startswith('user_reply:'))
+@dp.callback_query(F.data.startswith('user_reply:'))
 async def user_reply(callback: types.CallbackQuery, state: FSMContext):
     ticket_id = callback.data.split(':')[1]
     ticket = get_ticket_info_db(ticket_id)
@@ -486,13 +487,13 @@ async def process_user_reply(m: types.Message, state: FSMContext):
     await state.clear()
 
 
-@dp.callback_query(lambda c: c.data.startswith('refresh:'))
+@dp.callback_query(F.data.startswith('refresh:'))
 async def refresh(callback: types.CallbackQuery):
     await view_ticket(callback)
 
 
 # ==================== АДМИН ФУНКЦИИ ====================
-@dp.callback_query(lambda c: c.data == "admin_open")
+@dp.callback_query(F.data == "admin_open")
 async def show_open_tickets(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -518,7 +519,7 @@ async def show_open_tickets(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data.startswith('admin_view:'))
+@dp.callback_query(F.data.startswith('admin_view:'))
 async def admin_view(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -542,7 +543,7 @@ async def admin_view(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data.startswith('admin_reply:'))
+@dp.callback_query(F.data.startswith('admin_reply:'))
 async def admin_reply(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -591,7 +592,7 @@ async def process_admin_reply(m: types.Message, state: FSMContext):
     await state.clear()
 
 
-@dp.callback_query(lambda c: c.data.startswith('close:'))
+@dp.callback_query(F.data.startswith('close:'))
 async def close(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -611,7 +612,7 @@ async def close(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data == "admin_stats")
+@dp.callback_query(F.data == "admin_stats")
 async def stats(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа", show_alert=True)
@@ -625,7 +626,7 @@ async def stats(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==================== СКАНИРОВАНИЕ ====================
-@dp.callback_query(lambda c: c.data == "scan_file")
+@dp.callback_query(F.data == "scan_file")
 async def scan_start(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "🔍 Отправьте файл (до 20 МБ):",
@@ -635,7 +636,7 @@ async def scan_start(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.message(content_types=types.ContentType.DOCUMENT, state=States.waiting_file)
+@dp.message(States.waiting_file, F.document)
 async def scan_file(m: types.Message, state: FSMContext):
     doc = m.document
     if doc.file_size > 20 * 1024 * 1024:
@@ -699,7 +700,7 @@ async def scan_file(m: types.Message, state: FSMContext):
     await state.clear()
 
 
-@dp.message(state=States.waiting_file)
+@dp.message(States.waiting_file)
 async def invalid_file(m: types.Message):
     await m.answer("❌ Отправьте файл", reply_markup=back_kb())
 
