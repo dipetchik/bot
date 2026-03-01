@@ -301,29 +301,29 @@ def back_kb():
 
 def ticket_actions_kb(ticket_id, is_admin=True):
     if is_admin:
-        row1 = [
+        buttons = [
             InlineKeyboardButton("✏️ Ответить", callback_data=f"admin_reply:{ticket_id}"),
             InlineKeyboardButton("✅ Закрыть", callback_data=f"close:{ticket_id}")
         ]
     else:
-        row1 = [
+        buttons = [
             InlineKeyboardButton("✏️ Ответить", callback_data=f"user_reply:{ticket_id}"),
             InlineKeyboardButton("🔄 Обновить", callback_data=f"refresh:{ticket_id}")
         ]
     return InlineKeyboardMarkup(inline_keyboard=[
-        row1,
+        buttons,
         [InlineKeyboardButton("◀️ Назад", callback_data="back_list")]
     ])
 
 
 def user_tickets_kb(user_id):
     tickets = get_user_tickets_db(user_id)
-    inline_kb = []
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
     for t in tickets:
         emoji = "✅" if t[2] == "closed" else "🟢"
-        inline_kb.append([InlineKeyboardButton(f"{emoji} {t[0]}", callback_data=f"view_ticket:{t[0]}")])
-    inline_kb.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
-    return InlineKeyboardMarkup(inline_keyboard=inline_kb)
+        kb.inline_keyboard.append([InlineKeyboardButton(f"{emoji} {t[0]}", callback_data=f"view_ticket:{t[0]}")])
+    kb.inline_keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
+    return kb
 
 
 def scan_kb():
@@ -503,13 +503,13 @@ async def show_open_tickets(callback: types.CallbackQuery):
         return
 
     text = "ОТКРЫТЫЕ ОБРАЩЕНИЯ:\n\n"
-    buttons = []
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
     for t in tickets:
         ticket_id, _, username, _, created_at, updated_at = t
         text += f"🟢 {ticket_id}\nОт: @{username}\nОбновлено: {updated_at[:16]}\n\n"
-        buttons.append(InlineKeyboardButton(f"📌 {ticket_id}", callback_data=f"admin_view:{ticket_id}"))
+        kb.inline_keyboard.append([InlineKeyboardButton(f"📌 {ticket_id}", callback_data=f"admin_view:{ticket_id}")])
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[[btn] for btn in buttons] + [[InlineKeyboardButton("◀️ Назад", callback_data="back_main")]])
+    kb.inline_keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
 
     await callback.message.edit_text(text, reply_markup=kb)
     await callback.answer()
