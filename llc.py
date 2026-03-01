@@ -342,10 +342,7 @@ def scan_kb():
 async def global_back_main(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     text = "Главное меню:"
-    if callback.from_user.id == ADMIN_ID:
-        markup = admin_kb()
-    else:
-        markup = main_kb()
+    markup = admin_kb() if callback.from_user.id == ADMIN_ID else main_kb()
     try:
         await callback.message.edit_text(text, reply_markup=markup)
     except TelegramBadRequest as e:
@@ -367,10 +364,8 @@ async def global_back_list(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(Command("start"))
 async def start(message: types.Message):
     text = "👋 Добро пожаловать!\n\nФункции:\n• Сканирование файлов\n• Создание обращений\n• Просмотр истории"
-    if message.from_user.id == ADMIN_ID:
-        await message.answer(text + "\n\n(Админ-панель)", reply_markup=admin_kb())
-    else:
-        await message.answer(text, reply_markup=main_kb())
+    markup = admin_kb() if message.from_user.id == ADMIN_ID else main_kb()
+    await message.answer(text + ("\n\n(Админ-панель)" if message.from_user.id == ADMIN_ID else ""), reply_markup=markup)
 
 
 @dp.callback_query(lambda c: c.data == "info")
@@ -378,7 +373,6 @@ async def info(callback: types.CallbackQuery):
     text = "CoreDebuging Bot\n\nВерсия: 4.2\nКоманда: @CoreDebuging\nAPI: Hybrid Analysis"
     await callback.message.edit_text(text, reply_markup=back_kb())
     await callback.answer()
-
 
 # ==================== ОБРАЩЕНИЯ ====================
 @dp.callback_query(lambda c: c.data == "create_ticket")
@@ -393,7 +387,7 @@ async def create_ticket(callback: types.CallbackQuery):
 
 @dp.message(States.ticket_message)
 async def process_ticket(m: types.Message, state: FSMContext):
-    if len(m.text) < 10:
+    if len(m.text or "") < 10:
         await m.answer("❌ Слишком короткое сообщение. Минимум 10 символов.", reply_markup=back_kb())
         return
 
@@ -532,6 +526,10 @@ async def admin_view(callback: types.CallbackQuery):
 
     ticket_id = callback.data.split(':')[1]
     ticket = get_ticket_info_db(ticket_id)
+    if not ticket:
+        await callback.answer("❌ Обращение не найдено", show_alert=True)
+        return
+
     msgs = get_ticket_messages_db(ticket_id)
     status = "✅ Закрыто" if ticket[5] == "closed" else "🟢 Открыто"
 
@@ -708,7 +706,7 @@ async def invalid_file(m: types.Message):
 # ==================== ЗАПУСК ====================
 async def main():
     print("=" * 50)
-    print("CoreDebuging Bot")
+    print("CoreDebuging Bot — ЗАПУЩЕН")
     print(f"Админ ID: {ADMIN_ID}")
     print("=" * 50)
     await dp.start_polling(bot, skip_updates=True)
