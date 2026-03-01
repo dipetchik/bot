@@ -277,65 +277,64 @@ class States(StatesGroup):
 
 # ==================== КЛАВИАТУРЫ ====================
 def main_kb():
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton("📝 Создать обращение", callback_data="create_ticket"),
-        InlineKeyboardButton("📋 Мои обращения", callback_data="my_tickets"),
-        InlineKeyboardButton("🔍 Сканировать файл", callback_data="scan_file"),
-        InlineKeyboardButton("ℹ️ Инфо", callback_data="info")
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton("📝 Создать обращение", callback_data="create_ticket")],
+        [InlineKeyboardButton("📋 Мои обращения", callback_data="my_tickets")],
+        [InlineKeyboardButton("🔍 Сканировать файл", callback_data="scan_file")],
+        [InlineKeyboardButton("ℹ️ Инфо", callback_data="info")]
+    ])
     return kb
 
 
 def admin_kb():
-    kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        InlineKeyboardButton("📋 Открытые обращения", callback_data="admin_open"),
-        InlineKeyboardButton("📊 Статистика", callback_data="admin_stats"),
-        InlineKeyboardButton("ℹ️ Инфо", callback_data="info")
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton("📋 Открытые обращения", callback_data="admin_open")],
+        [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
+        [InlineKeyboardButton("ℹ️ Инфо", callback_data="info")]
+    ])
     return kb
 
 
 def back_kb():
-    kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("◀️ Назад", callback_data="back_main"))
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton("◀️ Назад", callback_data="back_main")]
+    ])
     return kb
 
 
 def ticket_actions_kb(ticket_id, is_admin=True):
-    kb = InlineKeyboardMarkup(row_width=2)
     if is_admin:
-        kb.add(
-            InlineKeyboardButton("✏️ Ответить", callback_data=f"admin_reply:{ticket_id}"),
-            InlineKeyboardButton("✅ Закрыть", callback_data=f"close:{ticket_id}")
-        )
+        buttons = [
+            [InlineKeyboardButton("✏️ Ответить", callback_data=f"admin_reply:{ticket_id}"),
+             InlineKeyboardButton("✅ Закрыть", callback_data=f"close:{ticket_id}")],
+        ]
     else:
-        kb.add(
-            InlineKeyboardButton("✏️ Ответить", callback_data=f"user_reply:{ticket_id}"),
-            InlineKeyboardButton("🔄 Обновить", callback_data=f"refresh:{ticket_id}")
-        )
-    kb.add(InlineKeyboardButton("◀️ Назад", callback_data="back_list"))
+        buttons = [
+            [InlineKeyboardButton("✏️ Ответить", callback_data=f"user_reply:{ticket_id}"),
+             InlineKeyboardButton("🔄 Обновить", callback_data=f"refresh:{ticket_id}")],
+        ]
+    buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="back_list")])
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     return kb
 
 
 def user_tickets_kb(user_id):
     tickets = get_user_tickets_db(user_id)
-    kb = InlineKeyboardMarkup(row_width=1)
+    buttons = []
     for t in tickets:
         emoji = "✅" if t[2] == "closed" else "🟢"
-        kb.add(InlineKeyboardButton(f"{emoji} {t[0]}", callback_data=f"view_ticket:{t[0]}"))
-    kb.add(InlineKeyboardButton("◀️ Назад", callback_data="back_main"))
+        buttons.append([InlineKeyboardButton(f"{emoji} {t[0]}", callback_data=f"view_ticket:{t[0]}")])
+    buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     return kb
 
 
 def scan_kb():
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton("🔍 Ещё", callback_data="scan_file"),
-        InlineKeyboardButton("📝 Создать обращение", callback_data="create_ticket"),
-        InlineKeyboardButton("◀️ Главное меню", callback_data="back_main")
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton("🔍 Ещё", callback_data="scan_file"),
+         InlineKeyboardButton("📝 Создать обращение", callback_data="create_ticket")],
+        [InlineKeyboardButton("◀️ Главное меню", callback_data="back_main")]
+    ])
     return kb
 
 # ==================== ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ "НАЗАД" ====================
@@ -506,14 +505,13 @@ async def show_open_tickets(callback: types.CallbackQuery):
         return
 
     text = "ОТКРЫТЫЕ ОБРАЩЕНИЯ:\n\n"
-    kb = InlineKeyboardMarkup(row_width=1)
-
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
     for t in tickets:
         ticket_id, _, username, _, created_at, updated_at = t
         text += f"🟢 {ticket_id}\nОт: @{username}\nОбновлено: {updated_at[:16]}\n\n"
-        kb.add(InlineKeyboardButton(f"📌 {ticket_id}", callback_data=f"admin_view:{ticket_id}"))
+        kb.inline_keyboard.append([InlineKeyboardButton(f"📌 {ticket_id}", callback_data=f"admin_view:{ticket_id}")])
 
-    kb.add(InlineKeyboardButton("◀️ Назад", callback_data="back_main"))
+    kb.inline_keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
 
     await callback.message.edit_text(text, reply_markup=kb)
     await callback.answer()
@@ -581,9 +579,9 @@ async def process_admin_reply(m: types.Message, state: FSMContext):
         await bot.send_message(
             ticket[2],
             f"📨 Ответ на {ticket_id}:\n\n{m.text}",
-            reply_markup=InlineKeyboardMarkup().add(
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton("📋 К обращению", callback_data=f"view_ticket:{ticket_id}")
-            )
+            ]])
         )
         await m.answer(f"✅ Ответ отправлен @{ticket[3]}", reply_markup=admin_kb())
     except Exception:
